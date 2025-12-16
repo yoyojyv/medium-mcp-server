@@ -13,7 +13,14 @@
 ```bash
 # 수행할 작업
 npm init -y
+
+# 핵심 의존성
 npm install @modelcontextprotocol/sdk zod rss-parser axios cheerio
+
+# Browser 모드 (선택사항 - Phase 2에서 추가)
+npm install playwright @mozilla/readability
+
+# 개발 의존성
 npm install -D typescript @types/node tsx vitest eslint
 ```
 
@@ -293,6 +300,80 @@ npm publish
 
 ---
 
+## Phase 7: Browser 모드 추가 (선택)
+
+### Step 7.1: Playwright 서비스 구현
+
+**파일:** `src/services/browser-fetcher.ts`
+
+```typescript
+import { chromium, Browser, Page } from 'playwright';
+import { Readability } from '@mozilla/readability';
+import { JSDOM } from 'jsdom';
+
+export class BrowserFetcher {
+  private browser: Browser | null = null;
+
+  async init(): Promise<void> {
+    this.browser = await chromium.launch({ headless: true });
+  }
+
+  async fetchContent(url: string): Promise<ArticleContent> {
+    const page = await this.browser!.newPage();
+    await page.goto(url, { waitUntil: 'networkidle' });
+
+    const html = await page.content();
+    const doc = new JSDOM(html, { url });
+    const reader = new Readability(doc.window.document);
+    const article = reader.parse();
+
+    await page.close();
+    return article;
+  }
+
+  async close(): Promise<void> {
+    await this.browser?.close();
+  }
+}
+```
+
+### Step 7.2: get_post_content Tool 업데이트
+
+**입력 스키마 확장:**
+```typescript
+z.object({
+  url: z.string().url().describe("Medium post URL"),
+  useBrowser: z.boolean().default(false).describe("Use browser for full content extraction"),
+})
+```
+
+**구현 로직:**
+1. `useBrowser: false` → RSS/cheerio 기반 추출 (기존)
+2. `useBrowser: true` → Playwright + Readability 사용
+
+### Step 7.3: Browser 설치 Tool 추가
+
+**파일:** `src/tools/install-browser.ts`
+
+```typescript
+server.tool(
+  "install_browser",
+  "Install Playwright browser for enhanced content extraction",
+  z.object({}),
+  async () => {
+    // playwright install chromium 실행
+  }
+);
+```
+
+### 참고: 기존 MCP 서버 활용 옵션
+
+대안으로 기존 `fetcher-mcp`를 활용할 수도 있습니다:
+- 장점: 검증된 구현, 빠른 개발
+- 단점: 외부 의존성, Medium 특화 최적화 어려움
+
+---
+
 ## 체크리스트
 
 ### Phase 1: 프로젝트 설정
@@ -329,6 +410,13 @@ npm publish
 - [ ] npm 배포
 - [ ] GitHub 릴리스
 
+### Phase 7: Browser 모드 (선택)
+- [ ] Playwright 의존성 추가
+- [ ] BrowserFetcher 서비스 구현
+- [ ] get_post_content Tool에 useBrowser 옵션 추가
+- [ ] install_browser Tool 구현
+- [ ] Browser 모드 테스트
+
 ---
 
 ## 예상 작업량
@@ -336,10 +424,12 @@ npm publish
 | Phase | 작업 |
 |-------|------|
 | Phase 1 | 프로젝트 초기 설정 |
-| Phase 2 | 핵심 서비스 구현 |
+| Phase 2 | 핵심 서비스 구현 (RSS 기반) |
 | Phase 3 | MCP Tools 구현 |
-| Phase 4 | 통합 및 테스트 |
-| Phase 5 | 문서화 및 배포 |
+| Phase 4 | 진입점 및 통합 |
+| Phase 5 | 테스트 |
+| Phase 6 | 문서화 및 배포 |
+| Phase 7 | Browser 모드 추가 (선택) |
 
 ---
 
@@ -352,7 +442,10 @@ index.ts
                     ├── get-user-posts.ts ──┐
                     ├── get-publication-posts.ts ──┼── services/rss-parser.ts
                     ├── get-tag-posts.ts ──┘              └── utils/url-builder.ts
-                    └── get-post-content.ts ── services/content-extractor.ts
+                    │
+                    └── get-post-content.ts ─┬─ services/content-extractor.ts (cheerio)
+                                             └─ services/browser-fetcher.ts (Playwright, 선택)
+                                                      └── @mozilla/readability
 ```
 
 ---

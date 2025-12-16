@@ -11,6 +11,7 @@ AI 어시스턴트(Claude, ChatGPT 등)가 Medium 블로그 콘텐츠에 접근�
 ### 1.3 배경
 - MCP는 LLM과 외부 데이터 소스를 연결하는 표준 프로토콜입니다
 - Medium은 공식적인 읽기 API를 제공하지 않지만, RSS 피드를 통해 콘텐츠에 접근할 수 있습니다
+- 웹 브라우저 자동화(Playwright)를 통해 RSS의 제한(최대 10개)을 극복할 수 있습니다
 - 현재 Medium 전용 MCP 서버가 존재하지 않아 시장 기회가 있습니다
 
 ### 1.4 타겟 사용자
@@ -134,37 +135,41 @@ AI 어시스턴트(Claude, ChatGPT 등)가 Medium 블로그 콘텐츠에 접근�
 |-----------|------|
 | rss-parser | RSS 피드 파싱 |
 | axios | HTTP 요청 |
-| cheerio | HTML 파싱 |
+| cheerio | HTML 파싱 (경량) |
+| playwright | 헤드리스 브라우저 (선택) |
+| @mozilla/readability | 콘텐츠 추출 (선택) |
 
 ## 5. 제약사항
 
 ### 5.1 Medium 제약
-- RSS 피드는 최대 10개 포스트만 제공
+- RSS 피드는 최대 10개 포스트만 제공 → Browser 모드로 극복 가능
 - Paywall 콘텐츠는 전체 내용 접근 불가
-- Rate limiting 가능성
+- Rate limiting 가능성 (특히 Browser 모드)
 
 ### 5.2 기술 제약
 - stdio 전송 방식 사용 (로컬 실행)
 - 실시간 업데이트 불가 (폴링 방식)
+- Browser 모드 시 Playwright 설치 필요 (~300MB)
 
 ## 6. 릴리스 계획
 
-### Phase 1 (MVP)
+### Phase 1 (MVP) - RSS 기반
 - 기본 프로젝트 구조 설정
-- 4개 핵심 Tool 구현
+- 4개 핵심 Tool 구현 (RSS 기반)
 - Claude Desktop 통합 테스트
 - npm 배포
 
-### Phase 2
-- 검색 기능 추가
-- Resource 지원
-- Prompt 템플릿
+### Phase 2 - Browser 모드 추가
+- Playwright 기반 콘텐츠 추출 추가
+- `get_post_content` Tool에 Browser 모드 옵션 추가
+- Readability 기반 본문 추출
 - 캐싱 최적화
 
-### Phase 3
-- 웹 스크래핑 통한 확장 콘텐츠
+### Phase 3 - 고급 기능
+- 검색 기능 (`search_posts`)
+- Resource 지원 (`medium://user/{username}`)
+- Prompt 템플릿
 - 다국어 지원
-- 고급 필터링
 
 ## 7. 성공 지표
 
@@ -189,3 +194,4 @@ AI 어시스턴트(Claude, ChatGPT 등)가 Medium 블로그 콘텐츠에 접근�
 - [Medium 접근 방법](./research/02-medium-content-access.md)
 - [기술 스택](./research/03-tech-stack.md)
 - [기존 구현 분석](./research/04-existing-implementations.md)
+- [브라우저 기반 MCP](./research/05-browser-based-mcp.md)
