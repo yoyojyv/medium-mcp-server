@@ -10,6 +10,7 @@ AI 어시스턴트(Claude, ChatGPT 등)가 Medium 글의 내용을 직접 읽고
 - Playwright 헤드리스 브라우저로 동적 콘텐츠 처리
 - Mozilla Readability로 본문만 깔끔하게 추출
 - Markdown 형식으로 변환하여 반환
+- **로그인 지원**: Medium 멤버십 전용 콘텐츠 접근 가능
 
 ## 지원 도메인
 
@@ -117,6 +118,81 @@ Medium 글 URL에서 콘텐츠를 추출합니다.
 이 Medium 글을 읽고 요약해줘: https://medium.com/@username/article-title-123abc
 ```
 
+---
+
+### `login`
+
+Medium 로그인을 위한 브라우저 창을 엽니다. 멤버십 전용 콘텐츠에 접근하려면 로그인이 필요합니다.
+
+**사용 예시:**
+```
+Medium에 로그인해줘
+```
+
+> 브라우저 창이 열리면 직접 로그인을 완료하세요.
+
+---
+
+### `save_login`
+
+로그인 완료 후 세션을 저장합니다. `login` 실행 후 사용합니다.
+
+**사용 예시:**
+```
+로그인 세션을 저장해줘
+```
+
+> 세션은 `~/.medium-mcp/auth.json`에 저장됩니다.
+
+---
+
+### `login_status`
+
+현재 로그인 상태를 확인합니다.
+
+**출력:**
+```json
+{
+  "loggedIn": true,
+  "storagePath": "/Users/username/.medium-mcp/auth.json",
+  "message": "You are logged in. Member-only content should be accessible."
+}
+```
+
+---
+
+### `logout`
+
+저장된 로그인 세션을 삭제합니다.
+
+**사용 예시:**
+```
+Medium에서 로그아웃해줘
+```
+
+---
+
+## 멤버십 콘텐츠 접근 방법
+
+Medium 멤버십 전용 글을 읽으려면:
+
+1. **로그인 시작**: "Medium에 로그인해줘" 라고 요청
+2. **브라우저에서 로그인**: 열린 브라우저 창에서 Medium 계정으로 로그인
+3. **세션 저장**: "로그인 세션을 저장해줘" 라고 요청
+4. **글 읽기**: 이제 멤버십 전용 글도 읽을 수 있습니다
+
+```
+# 예시 대화
+사용자: Medium에 로그인해줘
+Claude: 브라우저가 열렸습니다. 로그인을 완료한 후 알려주세요.
+
+사용자: 로그인 완료했어. 세션 저장해줘
+Claude: 로그인 세션이 저장되었습니다.
+
+사용자: 이 글 읽어줘: https://medium.com/membership-only-article
+Claude: (멤버십 전용 글 내용 표시)
+```
+
 ## 개발
 
 ### 개발 모드 실행
@@ -138,7 +214,8 @@ src/
 ├── index.ts              # 진입점
 ├── server.ts             # MCP 서버 설정
 ├── tools/
-│   └── read-article.ts   # read_article Tool
+│   ├── read-article.ts   # read_article Tool
+│   └── auth.ts           # 로그인 관련 Tools
 ├── services/
 │   └── article-extractor.ts  # Playwright + Readability
 └── types/
@@ -156,7 +233,7 @@ src/
 
 ## 제한사항
 
-- Paywall 뒤의 콘텐츠는 전체 내용 접근 불가
+- Paywall 콘텐츠는 로그인 후 접근 가능
 - 과도한 요청 시 Rate limiting 가능성
 - Playwright 브라우저 설치 필요 (~300MB)
 

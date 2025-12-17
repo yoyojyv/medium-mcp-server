@@ -2,13 +2,27 @@ import { chromium, Browser } from "playwright";
 import { Readability } from "@mozilla/readability";
 import { JSDOM } from "jsdom";
 import TurndownService from "turndown";
+import { existsSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
 import type { Article } from "../types/article.js";
 
 let browser: Browser | null = null;
 
-async function getBrowser(): Promise<Browser> {
-  if (!browser) {
-    browser = await chromium.launch({ headless: true });
+// Storage state file path
+const STORAGE_STATE_PATH = join(homedir(), ".medium-mcp", "auth.json");
+
+export function getStorageStatePath(): string {
+  return STORAGE_STATE_PATH;
+}
+
+export function isLoggedIn(): boolean {
+  return existsSync(STORAGE_STATE_PATH);
+}
+
+async function getBrowser(headless: boolean = true): Promise<Browser> {
+  if (!browser || !browser.isConnected()) {
+    browser = await chromium.launch({ headless });
   }
   return browser;
 }
@@ -20,12 +34,76 @@ export async function closeBrowser(): Promise<void> {
   }
 }
 
-export async function extractArticle(url: string): Promise<Article> {
-  const browserInstance = await getBrowser();
+export async function openLoginPage(): Promise<string> {
+  // Close existing browser if any
+  await closeBrowser();
+
+  // Launch browser in headful mode for manual login
+  const browserInstance = await getBrowser(false);
   const context = await browserInstance.newContext({
     userAgent:
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   });
+  const page = await context.newPage();
+
+  await page.goto("https://medium.com/m/signin", {
+    waitUntil: "domcontentloaded",
+  });
+
+  return "Browser opened for login. Please complete the login process in the browser window, then use 'save_login' tool to save your session.";
+}
+
+export async function saveLoginState(): Promise<string> {
+  if (!browser || !browser.isConnected()) {
+    throw new Error("No browser session found. Please run 'login' first.");
+  }
+
+  const contexts = browser.contexts();
+  if (contexts.length === 0) {
+    throw new Error("No browser context found.");
+  }
+
+  const context = contexts[0];
+
+  // Ensure directory exists
+  const dir = join(homedir(), ".medium-mcp");
+  const { mkdirSync } = await import("fs");
+  mkdirSync(dir, { recursive: true });
+
+  // Save storage state
+  await context.storageState({ path: STORAGE_STATE_PATH });
+
+  // Close the browser after saving
+  await closeBrowser();
+
+  return `Login state saved to ${STORAGE_STATE_PATH}. You can now use 'read_article' to access member-only content.`;
+}
+
+export async function clearLoginState(): Promise<string> {
+  const { unlinkSync } = await import("fs");
+
+  if (existsSync(STORAGE_STATE_PATH)) {
+    unlinkSync(STORAGE_STATE_PATH);
+    return "Login state cleared successfully.";
+  }
+
+  return "No login state found.";
+}
+
+export async function extractArticle(url: string): Promise<Article> {
+  const browserInstance = await getBrowser(true);
+
+  // Create context with storage state if available
+  const contextOptions: Parameters<Browser["newContext"]>[0] = {
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  };
+
+  if (existsSync(STORAGE_STATE_PATH)) {
+    contextOptions.storageState = STORAGE_STATE_PATH;
+  }
+
+  const context = await browserInstance.newContext(contextOptions);
   const page = await context.newPage();
 
   try {
