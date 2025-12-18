@@ -2,19 +2,31 @@ import { z } from "zod";
 import { server } from "../server.js";
 import { extractArticle } from "../services/article-extractor.js";
 
-server.tool(
+server.registerTool(
   "read_article",
-  "Read and extract content from a Medium article URL. Returns the article title, author, content in Markdown format, and metadata.",
   {
-    url: z.string().url().describe("Medium article URL to read"),
+    title: "Read Medium Article",
+    description:
+      "Read and extract content from a Medium article URL. Returns the article title, author, content in Markdown format, and metadata.",
+    inputSchema: {
+      url: z.string().url().describe("Medium article URL to read"),
+    },
   },
   async ({ url }) => {
     try {
       // Validate Medium URL
       const urlObj = new URL(url);
-      const validDomains = ["medium.com", "towardsdatascience.com", "betterprogramming.pub", "levelup.gitconnected.com"];
+      const validDomains = [
+        "medium.com",
+        "towardsdatascience.com",
+        "betterprogramming.pub",
+        "levelup.gitconnected.com",
+      ];
       const isMediumUrl = validDomains.some(
-        (domain) => urlObj.hostname === domain || urlObj.hostname.endsWith(`.${domain}`) || urlObj.hostname.endsWith(".medium.com")
+        (domain) =>
+          urlObj.hostname === domain ||
+          urlObj.hostname.endsWith(`.${domain}`) ||
+          urlObj.hostname.endsWith(".medium.com")
       );
 
       if (!isMediumUrl) {
@@ -44,7 +56,8 @@ server.tool(
         ],
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error occurred";
       return {
         content: [
           {
