@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { server } from "../server.js";
 import {
   openLoginPage,
@@ -9,10 +8,14 @@ import {
 } from "../services/article-extractor.js";
 
 // Login tool - opens browser for manual login
-server.tool(
+server.registerTool(
   "login",
-  "Open a browser window to log in to Medium. After logging in, use 'save_login' to save your session for accessing member-only content.",
-  {},
+  {
+    title: "Login to Medium",
+    description:
+      "Open a browser window to log in to Medium. After logging in, use 'save_login' to save your session for accessing member-only content.",
+    inputSchema: {},
+  },
   async () => {
     try {
       const message = await openLoginPage();
@@ -30,10 +33,14 @@ server.tool(
 );
 
 // Save login state tool
-server.tool(
+server.registerTool(
   "save_login",
-  "Save the current login session after completing login in the browser. Must be called after 'login' tool.",
-  {},
+  {
+    title: "Save Login Session",
+    description:
+      "Save the current login session after completing login in the browser. Must be called after 'login' tool.",
+    inputSchema: {},
+  },
   async () => {
     try {
       const message = await saveLoginState();
@@ -51,10 +58,13 @@ server.tool(
 );
 
 // Logout tool - clears saved login state
-server.tool(
+server.registerTool(
   "logout",
-  "Clear the saved Medium login session.",
-  {},
+  {
+    title: "Logout from Medium",
+    description: "Clear the saved Medium login session.",
+    inputSchema: {},
+  },
   async () => {
     try {
       const message = await clearLoginState();
@@ -72,10 +82,13 @@ server.tool(
 );
 
 // Check login status tool
-server.tool(
+server.registerTool(
   "login_status",
-  "Check if you are currently logged in to Medium.",
-  {},
+  {
+    title: "Check Login Status",
+    description: "Check if you are currently logged in to Medium.",
+    inputSchema: {},
+  },
   async () => {
     const loggedIn = isLoggedIn();
     const path = getStorageStatePath();

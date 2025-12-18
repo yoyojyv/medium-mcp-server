@@ -1,10 +1,10 @@
 import { chromium } from "playwright-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
-import type { Browser } from "playwright";
+import type { Browser, BrowserContext } from "playwright";
 import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
 import TurndownService from "turndown";
-import { existsSync } from "fs";
+import { existsSync, mkdirSync, chmodSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 import type { Article } from "../types/article.js";
@@ -13,6 +13,8 @@ import type { Article } from "../types/article.js";
 chromium.use(StealthPlugin());
 
 let browser: Browser | null = null;
+let activeContext: BrowserContext | null = null;
+let browserHeadlessMode: boolean | null = null;
 
 // Storage state file path
 const STORAGE_STATE_PATH = join(homedir(), ".medium-mcp", "auth.json");
@@ -26,16 +28,37 @@ export function isLoggedIn(): boolean {
 }
 
 async function getBrowser(headless: boolean = true): Promise<Browser> {
+  // Close existing browser if headless mode changed
+  if (browser && browser.isConnected() && browserHeadlessMode !== headless) {
+    await closeBrowser();
+  }
+
   if (!browser || !browser.isConnected()) {
     browser = await chromium.launch({ headless });
+    browserHeadlessMode = headless;
   }
   return browser;
 }
 
 export async function closeBrowser(): Promise<void> {
+  // Close active context first to prevent resource leak
+  if (activeContext) {
+    try {
+      await activeContext.close();
+    } catch {
+      // Context may already be closed, ignore
+    }
+    activeContext = null;
+  }
+
   if (browser) {
-    await browser.close();
+    try {
+      await browser.close();
+    } catch {
+      // Browser may already be closed, ignore
+    }
     browser = null;
+    browserHeadlessMode = null;
   }
 }
 
@@ -71,8 +94,8 @@ export async function openLoginPage(): Promise<string> {
 
   // Launch browser in headful mode for manual login
   const browserInstance = await getBrowser(false);
-  const context = await browserInstance.newContext(BROWSER_CONTEXT_OPTIONS);
-  const page = await context.newPage();
+  activeContext = await browserInstance.newContext(BROWSER_CONTEXT_OPTIONS);
+  const page = await activeContext.newPage();
 
   await page.goto("https://medium.com/m/signin", {
     waitUntil: "domcontentloaded",
@@ -86,20 +109,19 @@ export async function saveLoginState(): Promise<string> {
     throw new Error("No browser session found. Please run 'login' first.");
   }
 
-  const contexts = browser.contexts();
-  if (contexts.length === 0) {
-    throw new Error("No browser context found.");
+  if (!activeContext) {
+    throw new Error("No browser context found. Please run 'login' first.");
   }
 
-  const context = contexts[0];
-
-  // Ensure directory exists
+  // Ensure directory exists with secure permissions (owner only)
   const dir = join(homedir(), ".medium-mcp");
-  const { mkdirSync } = await import("fs");
-  mkdirSync(dir, { recursive: true });
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
 
   // Save storage state
-  await context.storageState({ path: STORAGE_STATE_PATH });
+  await activeContext.storageState({ path: STORAGE_STATE_PATH });
+
+  // Set secure file permissions (owner read/write only)
+  chmodSync(STORAGE_STATE_PATH, 0o600);
 
   // Close the browser after saving
   await closeBrowser();
@@ -108,9 +130,8 @@ export async function saveLoginState(): Promise<string> {
 }
 
 export async function clearLoginState(): Promise<string> {
-  const { unlinkSync } = await import("fs");
-
   if (existsSync(STORAGE_STATE_PATH)) {
+    const { unlinkSync } = await import("fs");
     unlinkSync(STORAGE_STATE_PATH);
     return "Login state cleared successfully.";
   }
