@@ -7,7 +7,10 @@ import TurndownService from "turndown";
 import { existsSync, mkdirSync, chmodSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
-import type { Article } from "../types/article.js";
+import { parseArticle, type Article } from "../types/article.js";
+import { TIMEOUTS } from "../config/constants.js";
+import { logger } from "../utils/logger.js";
+import { ArticleExtractionError } from "../utils/errors.js";
 
 // Apply stealth plugin to avoid bot detection
 chromium.use(StealthPlugin());
@@ -30,10 +33,12 @@ export function isLoggedIn(): boolean {
 async function getBrowser(headless: boolean = true): Promise<Browser> {
   // Close existing browser if headless mode changed
   if (browser && browser.isConnected() && browserHeadlessMode !== headless) {
+    logger.info("Browser headless mode changed, restarting browser", { headless });
     await closeBrowser();
   }
 
   if (!browser || !browser.isConnected()) {
+    logger.info("Launching browser", { headless });
     browser = await chromium.launch({ headless });
     browserHeadlessMode = headless;
   }
@@ -45,6 +50,7 @@ export async function closeBrowser(): Promise<void> {
   if (activeContext) {
     try {
       await activeContext.close();
+      logger.debug("Browser context closed");
     } catch {
       // Context may already be closed, ignore
     }
@@ -54,6 +60,7 @@ export async function closeBrowser(): Promise<void> {
   if (browser) {
     try {
       await browser.close();
+      logger.debug("Browser closed");
     } catch {
       // Browser may already be closed, ignore
     }
@@ -89,6 +96,8 @@ const BROWSER_CONTEXT_OPTIONS = {
 };
 
 export async function openLoginPage(): Promise<string> {
+  logger.info("Opening login page");
+
   // Close existing browser if any
   await closeBrowser();
 
@@ -99,8 +108,10 @@ export async function openLoginPage(): Promise<string> {
 
   await page.goto("https://medium.com/m/signin", {
     waitUntil: "domcontentloaded",
+    timeout: TIMEOUTS.LOGIN,
   });
 
+  logger.info("Login page opened successfully");
   return "Browser opened for login. Please complete the login process in the browser window, then use 'save_login' tool to save your session.";
 }
 
@@ -126,6 +137,7 @@ export async function saveLoginState(): Promise<string> {
   // Close the browser after saving
   await closeBrowser();
 
+  logger.info("Login state saved", { path: STORAGE_STATE_PATH });
   return `Login state saved to ${STORAGE_STATE_PATH}. You can now use 'read_article' to access member-only content.`;
 }
 
@@ -133,6 +145,7 @@ export async function clearLoginState(): Promise<string> {
   if (existsSync(STORAGE_STATE_PATH)) {
     const { unlinkSync } = await import("fs");
     unlinkSync(STORAGE_STATE_PATH);
+    logger.info("Login state cleared");
     return "Login state cleared successfully.";
   }
 
@@ -140,13 +153,20 @@ export async function clearLoginState(): Promise<string> {
 }
 
 export async function extractArticle(url: string): Promise<Article> {
+  logger.info("Extracting article", { url });
+
   const browserInstance = await getBrowser(true);
 
   // Create context with storage state if available
+  const hasAuth = existsSync(STORAGE_STATE_PATH);
   const contextOptions = {
     ...BROWSER_CONTEXT_OPTIONS,
-    ...(existsSync(STORAGE_STATE_PATH) && { storageState: STORAGE_STATE_PATH }),
+    ...(hasAuth && { storageState: STORAGE_STATE_PATH }),
   };
+
+  if (hasAuth) {
+    logger.debug("Using saved authentication state");
+  }
 
   const context = await browserInstance.newContext(contextOptions);
   const page = await context.newPage();
@@ -154,13 +174,21 @@ export async function extractArticle(url: string): Promise<Article> {
   try {
     await page.goto(url, {
       waitUntil: "domcontentloaded",
-      timeout: 30000,
+      timeout: TIMEOUTS.NAVIGATION,
     });
 
     // Wait for article content to load
-    await page.waitForSelector("article", { timeout: 10000 }).catch(() => {
-      // Article selector might not exist, continue anyway
-    });
+    const hasArticle = await page
+      .waitForSelector("article", { timeout: TIMEOUTS.SELECTOR })
+      .then(() => true)
+      .catch(() => {
+        logger.warn("Article selector not found, proceeding anyway", { url });
+        return false;
+      });
+
+    if (!hasArticle) {
+      logger.debug("Attempting extraction without article selector");
+    }
 
     const html = await page.content();
 
@@ -172,7 +200,7 @@ export async function extractArticle(url: string): Promise<Article> {
     const article = reader.parse();
 
     if (!article) {
-      throw new Error("Failed to extract article content");
+      throw new ArticleExtractionError("Failed to extract article content", url);
     }
 
     // Convert HTML to Markdown
@@ -181,6 +209,10 @@ export async function extractArticle(url: string): Promise<Article> {
       codeBlockStyle: "fenced",
     });
     const markdown = turndown.turndown(article.content || "");
+
+    if (!markdown.trim()) {
+      throw new ArticleExtractionError("Extracted content is empty", url);
+    }
 
     // Extract author from meta or page
     const authorMeta = await page
@@ -194,14 +226,31 @@ export async function extractArticle(url: string): Promise<Article> {
       .getAttribute("content")
       .catch(() => null);
 
-    return {
+    // Validate and return article using Zod schema
+    const result = parseArticle({
       title: article.title || "Untitled",
       author: authorMeta ?? article.byline ?? null,
       publishedAt: publishedMeta ?? null,
       content: markdown,
       excerpt: article.excerpt ?? null,
       url,
-    };
+    });
+
+    logger.info("Article extracted successfully", {
+      title: result.title,
+      contentLength: result.content.length,
+    });
+
+    return result;
+  } catch (error) {
+    if (error instanceof ArticleExtractionError) {
+      logger.error("Article extraction failed", error, { url });
+      throw error;
+    }
+
+    const message = error instanceof Error ? error.message : "Unknown error";
+    logger.error("Unexpected error during extraction", error as Error, { url });
+    throw new ArticleExtractionError(message, url, error as Error);
   } finally {
     await context.close();
   }

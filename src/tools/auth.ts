@@ -6,6 +6,8 @@ import {
   isLoggedIn,
   getStorageStatePath,
 } from "../services/article-extractor.js";
+import { successResponse, errorResponse } from "../utils/response.js";
+import { logger } from "../utils/logger.js";
 
 // Login tool - opens browser for manual login
 server.registerTool(
@@ -19,15 +21,11 @@ server.registerTool(
   async () => {
     try {
       const message = await openLoginPage();
-      return {
-        content: [{ type: "text" as const, text: message }],
-      };
+      return successResponse(message);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      return {
-        content: [{ type: "text" as const, text: `Error: ${errorMessage}` }],
-        isError: true,
-      };
+      logger.error("Login failed", error as Error);
+      return errorResponse(errorMessage);
     }
   }
 );
@@ -44,15 +42,11 @@ server.registerTool(
   async () => {
     try {
       const message = await saveLoginState();
-      return {
-        content: [{ type: "text" as const, text: message }],
-      };
+      return successResponse(message);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      return {
-        content: [{ type: "text" as const, text: `Error: ${errorMessage}` }],
-        isError: true,
-      };
+      logger.error("Save login failed", error as Error);
+      return errorResponse(errorMessage);
     }
   }
 );
@@ -68,15 +62,11 @@ server.registerTool(
   async () => {
     try {
       const message = await clearLoginState();
-      return {
-        content: [{ type: "text" as const, text: message }],
-      };
+      return successResponse(message);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      return {
-        content: [{ type: "text" as const, text: `Error: ${errorMessage}` }],
-        isError: true,
-      };
+      logger.error("Logout failed", error as Error);
+      return errorResponse(errorMessage);
     }
   }
 );
@@ -93,23 +83,12 @@ server.registerTool(
     const loggedIn = isLoggedIn();
     const path = getStorageStatePath();
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify(
-            {
-              loggedIn,
-              storagePath: path,
-              message: loggedIn
-                ? "You are logged in. Member-only content should be accessible."
-                : "You are not logged in. Use 'login' to access member-only content.",
-            },
-            null,
-            2
-          ),
-        },
-      ],
-    };
+    return successResponse({
+      loggedIn,
+      storagePath: path,
+      message: loggedIn
+        ? "You are logged in. Member-only content should be accessible."
+        : "You are not logged in. Use 'login' to access member-only content.",
+    });
   }
 );
