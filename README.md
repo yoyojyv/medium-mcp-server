@@ -96,9 +96,10 @@ echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | node dist/index.js
 Medium 글 URL에서 콘텐츠를 추출합니다.
 
 **입력:**
-| 파라미터 | 타입 | 필수 | 설명 |
-|---------|------|------|------|
-| url | string | O | Medium 글 URL |
+
+| 파라미터 | 타입   | 필수 | 설명          |
+| -------- | ------ | ---- | ------------- |
+| url      | string | O    | Medium 글 URL |
 
 **출력:**
 ```json
