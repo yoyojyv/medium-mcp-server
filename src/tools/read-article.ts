@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { server } from "../server.js";
 import { extractArticle } from "../services/article-extractor.js";
+import { isValidMediumUrl, VALID_MEDIUM_DOMAINS } from "../config/constants.js";
+import { successResponse, jsonErrorResponse } from "../utils/response.js";
+import { logger } from "../utils/logger.js";
+import { ArticleExtractionError } from "../utils/errors.js";
 
 server.registerTool(
   "read_article",
@@ -15,58 +19,28 @@ server.registerTool(
   async ({ url }) => {
     try {
       // Validate Medium URL
-      const urlObj = new URL(url);
-      const validDomains = [
-        "medium.com",
-        "towardsdatascience.com",
-        "betterprogramming.pub",
-        "levelup.gitconnected.com",
-      ];
-      const isMediumUrl = validDomains.some(
-        (domain) =>
-          urlObj.hostname === domain ||
-          urlObj.hostname.endsWith(`.${domain}`) ||
-          urlObj.hostname.endsWith(".medium.com")
-      );
-
-      if (!isMediumUrl) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                { error: "Invalid URL. Please provide a Medium article URL." },
-                null,
-                2
-              ),
-            },
-          ],
-          isError: true,
-        };
+      if (!isValidMediumUrl(url)) {
+        logger.warn("Invalid Medium URL provided", { url });
+        return jsonErrorResponse({
+          error: "Invalid URL. Please provide a Medium article URL.",
+          details: `Supported domains: ${VALID_MEDIUM_DOMAINS.join(", ")}`,
+        });
       }
 
       const article = await extractArticle(url);
-
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify(article, null, 2),
-          },
-        ],
-      };
+      return successResponse(article);
     } catch (error) {
+      if (error instanceof ArticleExtractionError) {
+        return jsonErrorResponse({
+          error: error.message,
+          details: error.toUserMessage(),
+        });
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error occurred";
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify({ error: errorMessage }, null, 2),
-          },
-        ],
-        isError: true,
-      };
+      logger.error("Unexpected error in read_article", error as Error, { url });
+      return jsonErrorResponse({ error: errorMessage });
     }
   }
 );
