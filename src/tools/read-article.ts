@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { server } from "../server.js";
 import { extractArticle } from "../services/article-extractor.js";
-import { isValidMediumUrl, VALID_MEDIUM_DOMAINS } from "../config/constants.js";
+import { isValidMediumUrl, getValidDomains } from "../config/constants.js";
 import { successResponse, jsonErrorResponse } from "../utils/response.js";
 import { logger } from "../utils/logger.js";
 import { ArticleExtractionError } from "../utils/errors.js";
@@ -23,7 +23,7 @@ server.registerTool(
         logger.warn("Invalid Medium URL provided", { url });
         return jsonErrorResponse({
           error: "Invalid URL. Please provide a Medium article URL.",
-          details: `Supported domains: ${VALID_MEDIUM_DOMAINS.join(", ")}`,
+          details: `Supported domains: ${getValidDomains().join(", ")}`,
         });
       }
 

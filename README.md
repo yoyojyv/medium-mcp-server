@@ -56,15 +56,60 @@ Medium에 로그인해줘
 → 이제 멤버십 전용 글도 읽을 수 있어요!
 ```
 
+### ➕ 새 도메인 추가
+
+```
+stackademic.com 도메인 추가해줘
+→ 이제 stackademic.com 글도 읽을 수 있어요!
+```
+
 > **팁**: URL만 붙여넣고 원하는 작업을 자연스럽게 요청하세요. Claude가 알아서 글을 읽고 처리합니다.
 
 ## 지원 도메인
+
+### 기본 도메인
 
 - `medium.com`
 - `*.medium.com` (사용자 서브도메인)
 - `towardsdatascience.com`
 - `betterprogramming.pub`
 - `levelup.gitconnected.com`
+- `uxdesign.cc`
+- `eand.co`
+- `betterhumans.pub`
+- `writingcooperative.com`
+
+### 커스텀 도메인 추가
+
+새로운 Medium 파트너 도메인(예: `stackademic.com`)을 추가할 수 있습니다:
+
+**방법 1: MCP 도구 사용**
+```
+도메인 추가해줘: stackademic.com
+```
+
+**방법 2: 설정 파일 편집**
+```json
+// ~/.medium-mcp/config.json
+{
+  "additionalDomains": ["stackademic.com", "blog.example.com"]
+}
+```
+
+**방법 3: 환경변수 설정** (MCP 클라이언트 설정에서)
+```json
+{
+  "mcpServers": {
+    "medium": {
+      "command": "node",
+      "args": ["/절대/경로/medium-mcp-server/dist/index.js"],
+      "env": {
+        "MEDIUM_ADDITIONAL_DOMAINS": "stackademic.com,another.com"
+      }
+    }
+  }
+}
+```
 
 ## 설치
 
@@ -219,6 +264,63 @@ Medium에서 로그아웃해줘
 
 ---
 
+### `add_domain`
+
+커스텀 Medium 파트너 도메인을 추가합니다.
+
+**입력:**
+
+| 파라미터 | 타입   | 필수 | 설명                              |
+| -------- | ------ | ---- | --------------------------------- |
+| domain   | string | O    | 추가할 도메인 (예: stackademic.com) |
+
+**사용 예시:**
+```
+stackademic.com 도메인 추가해줘
+```
+
+> 추가된 도메인은 `~/.medium-mcp/config.json`에 저장됩니다.
+
+---
+
+### `list_domains`
+
+현재 지원되는 모든 도메인 목록을 조회합니다.
+
+**출력:**
+```json
+{
+  "defaultDomains": ["medium.com", "towardsdatascience.com", ...],
+  "customDomains": ["stackademic.com"],
+  "allDomains": ["medium.com", ..., "stackademic.com"],
+  "configPath": "/Users/username/.medium-mcp/config.json"
+}
+```
+
+**사용 예시:**
+```
+지원되는 도메인 목록 보여줘
+```
+
+---
+
+### `remove_domain`
+
+커스텀 도메인을 제거합니다. 기본 도메인은 제거할 수 없습니다.
+
+**입력:**
+
+| 파라미터 | 타입   | 필수 | 설명              |
+| -------- | ------ | ---- | ----------------- |
+| domain   | string | O    | 제거할 도메인     |
+
+**사용 예시:**
+```
+stackademic.com 도메인 제거해줘
+```
+
+---
+
 ## 멤버십 콘텐츠 접근 방법
 
 Medium 멤버십 전용 글을 읽으려면:
@@ -264,14 +366,29 @@ npm run build
 src/
 ├── index.ts              # 진입점
 ├── server.ts             # MCP 서버 설정
+├── config/
+│   ├── constants.ts      # 도메인 목록, 타임아웃 설정
+│   └── settings.ts       # 설정 파일 관리
 ├── tools/
 │   ├── read-article.ts   # read_article Tool
-│   └── auth.ts           # 로그인 관련 Tools
+│   ├── auth.ts           # 로그인 관련 Tools
+│   └── domains.ts        # 도메인 관리 Tools
 ├── services/
 │   └── article-extractor.ts  # Playwright + Readability
-└── types/
-    └── article.ts        # 타입 정의
+├── types/
+│   └── article.ts        # 타입 정의
+└── utils/
+    ├── errors.ts         # 에러 클래스
+    ├── logger.ts         # 로깅
+    └── response.ts       # 응답 포맷
 ```
+
+### 설정 파일 위치
+
+| 파일 | 경로 | 설명 |
+|------|------|------|
+| 로그인 세션 | `~/.medium-mcp/auth.json` | Playwright 인증 상태 |
+| 사용자 설정 | `~/.medium-mcp/config.json` | 커스텀 도메인 등 |
 
 ## 기술 스택
 
