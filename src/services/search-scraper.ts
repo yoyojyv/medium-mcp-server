@@ -146,6 +146,9 @@ async function extractSearchResults(
       url: string | null;
       author: string | null;
       excerpt: string | null;
+      publishedAt: string | null;
+      claps: number | null;
+      publication: string | null;
     }> = [];
 
     articles.forEach((article) => {
@@ -168,11 +171,45 @@ async function extractSearchResults(
         }
       }
 
-      // 요약 추출 - 두 번째 h3
+      // 요약 추출 - h3
       const h3Elements = article.querySelectorAll("h3");
       const excerpt = h3Elements[0]?.textContent || null;
 
-      results.push({ title, url, author, excerpt });
+      // 발행일 추출 - "2d ago", "Jan 1", "Dec 25, 2024" 등의 형식
+      const textContent = article.textContent || "";
+      const timeMatch = textContent.match(
+        /(\d+[dhms]\s*ago|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+(?:,\s*\d{4})?)/i
+      );
+      const publishedAt = timeMatch ? timeMatch[0] : null;
+
+      // Claps 추출 - clap 아이콘 옆의 숫자
+      let claps: number | null = null;
+      const clapIcon = article.querySelector('[aria-labelledby*="clap"]');
+      if (clapIcon) {
+        const clapSpan = clapIcon.parentElement?.querySelector("span");
+        if (clapSpan?.textContent) {
+          const clapNum = parseInt(clapSpan.textContent.replace(/[^\d]/g, ""), 10);
+          if (!isNaN(clapNum)) claps = clapNum;
+        }
+      }
+
+      // Publication 추출 - "In {publication} by" 패턴 또는 URL에서
+      let publication: string | null = null;
+      const pubLink = article.querySelector(
+        'a[href^="https://medium.com/"][href$="?source=search_post"]'
+      );
+      if (pubLink) {
+        publication = pubLink.textContent?.trim() || null;
+      }
+      // URL에서 publication 추출 (예: /gitconnected/...)
+      if (!publication && url) {
+        const pubMatch = url.match(/medium\.com\/([^/@][^/]+)\//);
+        if (pubMatch) {
+          publication = pubMatch[1];
+        }
+      }
+
+      results.push({ title, url, author, excerpt, publishedAt, claps, publication });
     });
 
     return results;
@@ -200,11 +237,11 @@ async function extractSearchResults(
       title: raw.title.trim(),
       url: normalizedUrl,
       author: raw.author,
-      publishedAt: null,
+      publishedAt: raw.publishedAt,
       excerpt: raw.excerpt?.trim() || null,
-      claps: null,
+      claps: raw.claps,
       readingTime: null,
-      publication: null,
+      publication: raw.publication,
     });
 
     logger.debug("Extracted article", { title: raw.title.trim().substring(0, 50) });
