@@ -77,8 +77,10 @@ export async function searchMedium(
  * "Show more" 버튼을 클릭하여 더 많은 결과 로드
  */
 async function loadMoreResults(page: Page, targetCount: number): Promise<void> {
-  const maxClicks = 5; // 최대 클릭 횟수 제한
+  // limit에 비례한 최대 클릭 횟수 (10개당 1클릭 + 여유분)
+  const maxClicks = Math.min(Math.ceil(targetCount / 10) + 2, 20);
   let clicks = 0;
+  let previousCount = 0;
 
   while (clicks < maxClicks) {
     // 현재 로드된 결과 수 확인
@@ -88,6 +90,17 @@ async function loadMoreResults(page: Page, targetCount: number): Promise<void> {
       logger.debug("Enough results loaded", { currentCount, targetCount });
       break;
     }
+
+    // 클릭 후에도 결과 수가 증가하지 않으면 마지막 페이지
+    if (clicks > 0 && currentCount === previousCount) {
+      logger.debug("No more results available (count unchanged)", {
+        currentCount,
+        previousCount,
+        clicks,
+      });
+      break;
+    }
+    previousCount = currentCount;
 
     // 페이지 바닥으로 스크롤 (Show more 버튼이 바닥에 있음)
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
