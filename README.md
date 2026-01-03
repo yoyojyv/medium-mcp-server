@@ -455,6 +455,9 @@ Medium 멤버십 전용 글을 읽으려면:
 3. **세션 저장**: "로그인 세션을 저장해줘" 라고 요청
 4. **글 읽기**: 이제 멤버십 전용 글도 읽을 수 있습니다
 
+> **중요**: 로그인 시 **이메일 기반 인증**을 사용하세요.
+> Google/Apple/Facebook 등 OAuth 인증은 Playwright 환경에서 정상 작동하지 않을 수 있습니다.
+
 ### Claude Desktop 사용 예시
 
 ![Claude Desktop에서 Medium MCP 로그인 플로우](docs/images/claude-screenshot.png)
