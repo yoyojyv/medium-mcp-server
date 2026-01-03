@@ -89,6 +89,10 @@ async function loadMoreResults(page: Page, targetCount: number): Promise<void> {
       break;
     }
 
+    // 페이지 바닥으로 스크롤 (Show more 버튼이 바닥에 있음)
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await page.waitForTimeout(500);
+
     // "Show more" 버튼 찾기
     const showMoreButton = page.locator(SHOW_MORE_BUTTON_SELECTOR).first();
     const isVisible = await showMoreButton.isVisible().catch(() => false);
@@ -115,95 +119,84 @@ async function loadMoreResults(page: Page, targetCount: number): Promise<void> {
 
 /**
  * 검색 결과 페이지에서 글 목록 추출
+ * evaluate()를 사용하여 한 번에 모든 데이터 추출 (성능 최적화)
  */
 async function extractSearchResults(
   page: Page,
   limit: number
 ): Promise<SearchResult[]> {
-  const articleElements = await page.locator(SEARCH_RESULT_SELECTOR).all();
+  // 브라우저 내에서 한 번에 모든 데이터 추출
+  const rawResults = await page.evaluate((selector) => {
+    const articles = document.querySelectorAll(selector);
+    const results: Array<{
+      title: string | null;
+      url: string | null;
+      author: string | null;
+      excerpt: string | null;
+    }> = [];
+
+    articles.forEach((article) => {
+      // URL 추출 - div[role="link"][data-href]
+      const linkDiv = article.querySelector('div[role="link"][data-href]');
+      const url = linkDiv?.getAttribute("data-href") || null;
+
+      // 제목 추출 - h2
+      const h2 = article.querySelector("h2");
+      const title = h2?.textContent || null;
+
+      // 저자 추출 - a[href*="/@"]
+      const authorLinks = article.querySelectorAll('a[href*="/@"]');
+      let author: string | null = null;
+      for (const link of authorLinks) {
+        const text = link.textContent?.trim();
+        if (text && text.length > 0 && !text.includes("·")) {
+          author = text;
+          break;
+        }
+      }
+
+      // 요약 추출 - 두 번째 h3
+      const h3Elements = article.querySelectorAll("h3");
+      const excerpt = h3Elements[0]?.textContent || null;
+
+      results.push({ title, url, author, excerpt });
+    });
+
+    return results;
+  }, SEARCH_RESULT_SELECTOR);
+
+  logger.debug("Raw results extracted", { count: rawResults.length });
+
+  // 결과 정제
   const results: SearchResult[] = [];
   const seenUrls = new Set<string>();
 
-  logger.debug("Found article elements", { count: articleElements.length });
-
-  for (const element of articleElements) {
+  for (const raw of rawResults) {
     if (results.length >= limit) break;
 
-    try {
-      // 제목 추출 (h2 또는 h3)
-      const titleElement = element.locator("h2, h3").first();
-      const title = await titleElement.textContent().catch(() => null);
-
-      // 링크 추출 - 제목 링크 우선
-      const titleLink = element.locator("h2 a, h3 a").first();
-      let href = await titleLink.getAttribute("href").catch(() => null);
-
-      // 제목 링크가 없으면 article 내 다른 링크 시도
-      if (!href) {
-        const anyLink = element.locator('a[href*="/@"], a[href*="/p/"]').first();
-        href = await anyLink.getAttribute("href").catch(() => null);
-      }
-
-      if (!title || !href) {
-        logger.debug("Skipping article - missing title or href", { title, href });
-        continue;
-      }
-
-      // URL 정규화
-      const url = href.startsWith("http")
-        ? href
-        : `https://medium.com${href}`;
-
-      // 중복 제거 (source 파라미터 제외하고 비교)
-      const normalizedUrl = url.split("?")[0];
-      if (seenUrls.has(normalizedUrl)) continue;
-      seenUrls.add(normalizedUrl);
-
-      // 저자 추출
-      const authorElement = element.locator('a[href*="/@"]').first();
-      const authorText = await authorElement.textContent().catch(() => null);
-      const authorHref = await authorElement.getAttribute("href").catch(() => null);
-      const author = authorText?.trim() || extractUsernameFromHref(authorHref);
-
-      // 요약 추출
-      const excerptElement = element.locator("h3 + p, h2 + p, p").first();
-      const excerpt = await excerptElement.textContent().catch(() => null);
-
-      // 발행일 추출
-      const dateElement = element.locator("time");
-      const publishedAt = await dateElement.getAttribute("datetime").catch(() => null);
-
-      // 읽기 시간 추출
-      const readingTimeText = await element
-        .locator('span:has-text("min read")')
-        .textContent()
-        .catch(() => null);
-
-      results.push({
-        title: title.trim(),
-        url: normalizedUrl,
-        author,
-        publishedAt,
-        excerpt: excerpt?.trim() || null,
-        claps: null,
-        readingTime: readingTimeText?.trim() || null,
-        publication: null,
-      });
-
-      logger.debug("Extracted article", { title: title.trim(), url: normalizedUrl });
-    } catch {
+    if (!raw.title || !raw.url) {
       continue;
     }
+
+    // URL 정규화
+    const normalizedUrl = raw.url.split("?")[0];
+    if (seenUrls.has(normalizedUrl)) continue;
+    seenUrls.add(normalizedUrl);
+
+    results.push({
+      title: raw.title.trim(),
+      url: normalizedUrl,
+      author: raw.author,
+      publishedAt: null,
+      excerpt: raw.excerpt?.trim() || null,
+      claps: null,
+      readingTime: null,
+      publication: null,
+    });
+
+    logger.debug("Extracted article", { title: raw.title.trim().substring(0, 50) });
   }
 
   return results;
 }
 
-/**
- * href에서 username 추출
- */
-function extractUsernameFromHref(href: string | null): string | null {
-  if (!href) return null;
-  const match = href.match(/@([^/?]+)/);
-  return match ? match[1] : null;
-}
