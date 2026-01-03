@@ -30,7 +30,7 @@ export function isLoggedIn(): boolean {
   return existsSync(STORAGE_STATE_PATH);
 }
 
-async function getBrowser(headless: boolean = true): Promise<Browser> {
+export async function getBrowser(headless: boolean = true): Promise<Browser> {
   // Close existing browser if headless mode changed
   if (browser && browser.isConnected() && browserHeadlessMode !== headless) {
     logger.info("Browser headless mode changed, restarting browser", { headless });
@@ -70,7 +70,7 @@ export async function closeBrowser(): Promise<void> {
 }
 
 // Realistic browser context options to avoid bot detection
-const BROWSER_CONTEXT_OPTIONS = {
+export const BROWSER_CONTEXT_OPTIONS = {
   userAgent:
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
   viewport: { width: 1920, height: 1080 },

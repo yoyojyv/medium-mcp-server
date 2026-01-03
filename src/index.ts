@@ -5,6 +5,8 @@ import { server } from "./server.js";
 import "./tools/read-article.js";
 import "./tools/auth.js";
 import "./tools/domains.js";
+import "./tools/author-articles.js";
+import "./tools/search.js";
 import { closeBrowser } from "./services/article-extractor.js";
 
 let isShuttingDown = false;

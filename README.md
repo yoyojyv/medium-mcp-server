@@ -18,6 +18,8 @@ AI 어시스턴트(Claude, ChatGPT 등)가 Medium 글의 내용을 직접 읽고
 ## Features
 
 - Medium 글 URL에서 콘텐츠 추출
+- **Author 글 목록**: 특정 Author의 글 목록 조회 (RSS/스크래핑)
+- **검색 기능**: Medium 전체 검색 및 Author 내 검색
 - Playwright 헤드리스 브라우저로 동적 콘텐츠 처리
 - Mozilla Readability로 본문만 깔끔하게 추출
 - Markdown 형식으로 변환하여 반환
@@ -45,6 +47,20 @@ AI 어시스턴트(Claude, ChatGPT 등)가 Medium 글의 내용을 직접 읽고
 
 ```
 이 기술 블로그에서 설명하는 개념을 초보자도 이해할 수 있게 설명해줘: [Medium URL]
+```
+
+### 📋 Author 글 목록 & 검색
+
+```
+@springrod 의 글 목록을 보여줘
+```
+
+```
+@username 의 글 중에서 "AI agent" 관련 글을 찾아줘
+```
+
+```
+Medium에서 "React hooks" 관련 글을 검색해줘
 ```
 
 ### 🔐 멤버십 글 읽기 (로그인 필요)
@@ -321,6 +337,115 @@ stackademic.com 도메인 제거해줘
 
 ---
 
+### `list_author_articles`
+
+특정 Author의 글 목록을 가져옵니다.
+
+**입력:**
+
+| 파라미터 | 타입   | 필수 | 설명                                           |
+| -------- | ------ | ---- | ---------------------------------------------- |
+| username | string | O    | Medium username (@ 없이)                       |
+| source   | string | X    | `rss` (기본, 빠름) 또는 `scrape` (더 많은 글)  |
+| limit    | number | X    | 최대 글 개수 (scrape 모드에서만 적용, 기본 10) |
+| keyword  | string | X    | 키워드 필터링                                  |
+
+**출력:**
+```json
+{
+  "username": "springrod",
+  "articleCount": 10,
+  "articles": [
+    {
+      "title": "글 제목",
+      "url": "https://medium.com/@springrod/...",
+      "publishedAt": "Mon, 22 Dec 2025 08:25:33 GMT",
+      "categories": ["genai", "java", "ai-agent"],
+      "content": "전체 HTML 콘텐츠 (RSS 모드에서만)"
+    }
+  ],
+  "source": "rss",
+  "hasMore": true
+}
+```
+
+**사용 예시:**
+```
+@springrod 의 글 목록을 보여줘
+```
+
+```
+@username 의 최근 글 20개를 스크래핑으로 가져와줘
+```
+
+---
+
+### `search_articles`
+
+Medium 전체에서 글을 검색합니다. (Playwright 스크래핑 사용)
+
+**입력:**
+
+| 파라미터 | 타입   | 필수 | 설명                     |
+| -------- | ------ | ---- | ------------------------ |
+| query    | string | O    | 검색어                   |
+| limit    | number | X    | 최대 결과 개수 (기본 10) |
+
+**출력:**
+```json
+{
+  "query": "AI agent java",
+  "resultCount": 5,
+  "results": [
+    {
+      "title": "글 제목",
+      "url": "https://medium.com/...",
+      "author": "작성자",
+      "excerpt": "글 요약"
+    }
+  ],
+  "hasMore": true
+}
+```
+
+**사용 예시:**
+```
+Medium에서 "React hooks" 관련 글을 검색해줘
+```
+
+> **참고**: 스크래핑 방식이므로 봇 탐지로 차단될 수 있습니다.
+
+---
+
+### `search_author_articles`
+
+특정 Author의 글 중에서 키워드로 검색합니다. (RSS 피드 기반)
+
+**입력:**
+
+| 파라미터 | 타입   | 필수 | 설명                     |
+| -------- | ------ | ---- | ------------------------ |
+| username | string | O    | Medium username (@ 없이) |
+| keyword  | string | O    | 검색할 키워드            |
+
+**출력:**
+```json
+{
+  "username": "springrod",
+  "keyword": "agent",
+  "matchCount": 8,
+  "articles": [...],
+  "note": "Search is limited to author's ~10 most recent articles from RSS feed"
+}
+```
+
+**사용 예시:**
+```
+@springrod 의 글 중에서 "agent" 관련 글을 찾아줘
+```
+
+---
+
 ## 멤버십 콘텐츠 접근 방법
 
 Medium 멤버십 전용 글을 읽으려면:
@@ -372,11 +497,18 @@ src/
 ├── tools/
 │   ├── read-article.ts   # read_article Tool
 │   ├── auth.ts           # 로그인 관련 Tools
-│   └── domains.ts        # 도메인 관리 Tools
+│   ├── domains.ts        # 도메인 관리 Tools
+│   ├── author-articles.ts # list_author_articles Tool
+│   └── search.ts         # search_articles, search_author_articles Tools
 ├── services/
-│   └── article-extractor.ts  # Playwright + Readability
+│   ├── article-extractor.ts  # Playwright + Readability
+│   ├── rss-feed.ts           # RSS 피드 파싱
+│   ├── author-scraper.ts     # Author 페이지 스크래핑
+│   └── search-scraper.ts     # 검색 페이지 스크래핑
 ├── types/
-│   └── article.ts        # 타입 정의
+│   ├── article.ts            # Article 타입
+│   ├── author-article.ts     # AuthorArticle 타입
+│   └── search-result.ts      # SearchResult 타입
 └── utils/
     ├── errors.ts         # 에러 클래스
     ├── logger.ts         # 로깅
@@ -398,6 +530,7 @@ src/
 - **@mozilla/readability** - 콘텐츠 추출
 - **Turndown** - HTML → Markdown 변환
 - **Zod** - 스키마 검증
+- **rss-parser** - RSS 피드 파싱
 
 ## 제한사항
 
